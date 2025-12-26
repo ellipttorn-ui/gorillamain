@@ -2227,6 +2227,10 @@ print("🎯 När du siktar på någon = LÅST tills du släpper aimbot-knappen!"
 
 print("Loading Features...")
 
+-- VIKTIGA VARIABLER (om de inte redan finns)
+local player = player or game.Players.LocalPlayer
+local camera = camera or workspace.CurrentCamera
+
 -- CROSSHAIR SYSTEM
 local CrosshairSystem = {
     enabled = false,
@@ -2369,42 +2373,48 @@ local function detectYourShot()
     return false
 end
 
--- FÖRBÄTTRAD HEALTH MONITOR
+-- FÖRBÄTTRAD HEALTH MONITOR MED ERROR HANDLING
 local function monitorHealth()
     if not HitSoundSystem.enabled then return end
     
-    local currentTime = tick()
-    local justShot = currentTime - HitSoundSystem.lastShotTime < 0.8  -- ÖKAT från 0.5 till 0.8
-    
-    if not justShot then return end
-    
-    for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr ~= player and plr.Character then
-            local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                
-                -- Initiera health tracking
-                if not HitSoundSystem.lastHealth[plr] then
+    local success, err = pcall(function()
+        local currentTime = tick()
+        local justShot = currentTime - HitSoundSystem.lastShotTime < 0.8
+        
+        if not justShot then return end
+        
+        for _, plr in pairs(game.Players:GetPlayers()) do
+            if plr ~= player and plr.Character then
+                local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    
+                    -- Initiera health tracking
+                    if not HitSoundSystem.lastHealth[plr] then
+                        HitSoundSystem.lastHealth[plr] = humanoid.Health
+                    end
+                    
+                    -- Kolla cooldown för att undvika spam
+                    local cooldown = HitSoundSystem.healthCheckCooldown[plr] or 0
+                    if currentTime - cooldown < 0.1 then
+                        continue
+                    end
+                    
+                    -- Kolla health drop (mer känslig)
+                    local healthDrop = HitSoundSystem.lastHealth[plr] - humanoid.Health
+                    if healthDrop > 0.1 then
+                        playHitSound()
+                        HitSoundSystem.healthCheckCooldown[plr] = currentTime
+                        print("Hit detected on " .. plr.Name .. " (Damage: " .. math.floor(healthDrop) .. ")")
+                    end
+                    
                     HitSoundSystem.lastHealth[plr] = humanoid.Health
                 end
-                
-                -- Kolla cooldown för att undvika spam
-                local cooldown = HitSoundSystem.healthCheckCooldown[plr] or 0
-                if currentTime - cooldown < 0.1 then
-                    continue
-                end
-                
-                -- Kolla health drop (mer känslig)
-                local healthDrop = HitSoundSystem.lastHealth[plr] - humanoid.Health
-                if healthDrop > 0.1 then
-                    playHitSound()
-                    HitSoundSystem.healthCheckCooldown[plr] = currentTime
-                    print("Hit detected on " .. plr.Name .. " (Damage: " .. math.floor(healthDrop) .. ")")
-                end
-                
-                HitSoundSystem.lastHealth[plr] = humanoid.Health
             end
         end
+    end)
+    
+    if not success then
+        warn("Hitsound error: " .. tostring(err))
     end
 end
 
